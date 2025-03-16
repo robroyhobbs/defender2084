@@ -1,18 +1,20 @@
 {
   "name": "defender2084",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "A retro-futuristic space combat game",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@types/three": "^0.174.0",
-    "express": "^4.21.2",
+    "express": "^4.18.2",
     "three": "^0.174.0",
-    "vite": "^6.2.2"
-  },
-  "description": ""
+    "vite": "^6.2.2",
+    "babylonjs": "^6.47.0",
+    "cannon": "^0.6.2"
+  }
 }

@@ -2,16 +2,17 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Babylon.js Scene</title>
+    <title>Defender 2084</title>
     <style>
         html, body {
-            width: 100%;
-            height: 100%;
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
+            background-color: black;
         }
-        #renderCanvas {
+        canvas {
             width: 100%;
             height: 100%;
             touch-action: none;
@@ -27,69 +28,101 @@
             background: rgba(0,0,0,0.7);
             padding: 20px;
             border-radius: 10px;
+            display: block;
+            z-index: 1000;
+        }
+        #debugOutput {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            max-height: 200px;
+            overflow-y: auto;
             display: none;
         }
     </style>
     <script>
-        // Script loading error handler
-        function handleScriptError(scriptSrc) {
-            console.error('Failed to load script:', scriptSrc);
-            document.getElementById('loadingText').textContent = 'Failed to load required script: ' + scriptSrc;
-            document.getElementById('loadingText').style.display = 'block';
-        }
-    </script>
-    <!-- Load dependencies with error handling -->
-    <script src="https://cdn.babylonjs.com/earcut.min.js" onerror="handleScriptError('earcut.min.js')"></script>
-    <script src="https://cdn.babylonjs.com/babylon.js" onerror="handleScriptError('babylon.js')"></script>
-    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" onerror="handleScriptError('babylonjs.loaders.min.js')"></script>
-    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js" onerror="handleScriptError('babylon.gui.min.js')"></script>
-    <script src="game.js" onerror="handleScriptError('game.js')"></script>
-</head>
-<body style="background-color: black;">
-    <canvas id="renderCanvas"></canvas>
-    <div id="loadingText">Loading game...</div>
-    <script>
-        // Check if BABYLON is defined
-        function checkBabylonLoaded() {
-            if (typeof BABYLON === 'undefined') {
-                console.error('BABYLON is not defined - scripts may not have loaded correctly');
-                document.getElementById('loadingText').textContent = 'Error: Game engine not loaded';
-                document.getElementById('loadingText').style.display = 'block';
-                return false;
+        // Debug logging
+        function debug(message) {
+            console.log(message);
+            const debugOutput = document.getElementById('debugOutput');
+            if (debugOutput) {
+                debugOutput.style.display = 'block';
+                debugOutput.innerHTML += message + '<br>';
+                debugOutput.scrollTop = debugOutput.scrollHeight;
             }
+        }
+
+        // Error handling
+        function handleScriptError(scriptName) {
+            const error = `Failed to load script: ${scriptName}`;
+            console.error(error);
+            debug(error);
+            document.getElementById('loadingText').innerHTML = error;
+        }
+
+        // Check if Babylon is loaded
+        function checkDependencies() {
+            debug('Checking dependencies...');
+            if (typeof BABYLON === 'undefined') {
+                const error = 'Babylon.js not loaded';
+                debug(error);
+                throw new Error(error);
+            }
+            if (typeof BABYLON.GUI === 'undefined') {
+                const error = 'Babylon GUI not loaded';
+                debug(error);
+                throw new Error(error);
+            }
+            if (typeof CANNON === 'undefined') {
+                const error = 'Cannon.js not loaded';
+                debug(error);
+                throw new Error(error);
+            }
+            debug('All dependencies loaded successfully');
             return true;
         }
-
+    </script>
+    <!-- Core Babylon.js -->
+    <script src="https://cdn.babylonjs.com/babylon.js" onerror="handleScriptError('babylon.js')"></script>
+    <!-- Loaders -->
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" onerror="handleScriptError('babylonjs.loaders.min.js')"></script>
+    <!-- GUI -->
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js" onerror="handleScriptError('babylon.gui.min.js')"></script>
+    <!-- Physics -->
+    <script src="https://cdn.babylonjs.com/cannon.js" onerror="handleScriptError('cannon.js')"></script>
+    <!-- Game script -->
+    <script src="game.js" onerror="handleScriptError('game.js')"></script>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="loadingText">Loading game...</div>
+    <div id="debugOutput"></div>
+    <script>
         window.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM Content Loaded');
-            document.getElementById('loadingText').style.display = 'block';
-            
-            // Add error handling
-            window.onerror = function(msg, url, lineNo, columnNo, error) {
-                const errorMessage = `Error: ${msg}\nURL: ${url}\nLine: ${lineNo}\nColumn: ${columnNo}`;
-                console.error(errorMessage);
-                console.error('Error object:', error);
-                document.getElementById('loadingText').textContent = 'Error loading game. Check console for details.';
-                return false;
-            };
-
-            // Wait a short moment to ensure scripts are loaded
-            setTimeout(() => {
-                try {
-                    console.log('Checking BABYLON...');
-                    if (!checkBabylonLoaded()) return;
-                    
-                    console.log('BABYLON loaded, initializing game...');
+            debug('DOM Content Loaded');
+            try {
+                debug('Checking dependencies...');
+                if (checkDependencies()) {
+                    debug('Creating game instance...');
                     const game = new Game('renderCanvas');
-                    console.log('Game instance created');
+                    debug('Starting game...');
                     game.start();
-                    console.log('Game started');
+                    debug('Game started successfully');
                     document.getElementById('loadingText').style.display = 'none';
-                } catch (e) {
-                    console.error('Failed to initialize game:', e);
-                    document.getElementById('loadingText').textContent = 'Failed to initialize game: ' + e.message;
                 }
-            }, 500);
+            } catch (error) {
+                const errorMessage = 'Failed to initialize game: ' + error.message;
+                console.error(errorMessage);
+                debug(errorMessage);
+                document.getElementById('loadingText').innerHTML = errorMessage;
+            }
         });
     </script>
 </body>

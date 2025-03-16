@@ -20,7 +20,7 @@ class Lander {
 
         // Movement properties
         this.speed = 0.3;
-        this.astronauts = astronauts;
+        this.astronauts = astronauts || [];
     }
 
     update(gamePlaneZ) {
@@ -33,19 +33,23 @@ class Lander {
         let nearestAstronaut = null;
         let minDistance = Infinity;
 
-        for (const astronaut of this.astronauts) {
-            const distance = BABYLON.Vector3.Distance(
-                new BABYLON.Vector3(this.mesh.position.x, 0, this.mesh.position.z),
-                new BABYLON.Vector3(astronaut.position.x, 0, astronaut.position.z)
-            );
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestAstronaut = astronaut;
+        if (this.astronauts && this.astronauts.length > 0) {
+            for (const astronaut of this.astronauts) {
+                if (!astronaut || !astronaut.position) continue;
+                
+                const distance = BABYLON.Vector3.Distance(
+                    new BABYLON.Vector3(this.mesh.position.x, 0, this.mesh.position.z),
+                    new BABYLON.Vector3(astronaut.position.x, 0, astronaut.position.z)
+                );
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestAstronaut = astronaut;
+                }
             }
         }
 
         // Move towards nearest astronaut
-        if (nearestAstronaut) {
+        if (nearestAstronaut && nearestAstronaut.position) {
             const direction = nearestAstronaut.position.subtract(this.mesh.position).normalize();
             this.mesh.position.x += direction.x * this.speed;
         }
@@ -60,191 +64,262 @@ class Lander {
 
 class Game {
     constructor(canvasId) {
+        console.log('Game constructor started');
+        
         // Get the canvas element
         this.canvas = document.getElementById(canvasId);
-        // Generate the BABYLON 3D engine
-        this.engine = new BABYLON.Engine(this.canvas, true);
-        // Initialize movement properties
-        this.moveSpeed = 0.1;
-        this.cameraXBounds = { min: -3, max: 3 };  // Limit X movement
-        this.cameraYBounds = { min: 1, max: 4 };   // Limit Y movement
-        this.keys = {};
-        // Store game objects
+        if (!this.canvas) {
+            console.error('Canvas element not found');
+            throw new Error('Canvas element not found');
+        }
+        console.log('Canvas element found');
+
+        try {
+            // Generate the BABYLON 3D engine
+            console.log('Creating Babylon engine...');
+            this.engine = new BABYLON.Engine(this.canvas, true);
+            console.log('Babylon engine created');
+            
+            // Initialize game properties
+            console.log('Initializing game properties...');
+            this.initializeGameProperties();
+
+            // Create scene and setup game
+            console.log('Creating scene...');
+            this.scene = this.createScene();
+            if (!this.scene) {
+                throw new Error('Failed to create scene');
+            }
+            console.log('Scene created successfully');
+
+            // Create GUI after scene is ready
+            console.log('Creating GUI...');
+            this.createGUI();
+            console.log('GUI created');
+
+            // Set up controls after GUI
+            console.log('Setting up controls...');
+            this.setupControls();
+            console.log('Controls set up');
+
+            // Initialize display updates
+            console.log('Initializing display updates...');
+            this.initializeDisplayUpdates();
+            console.log('Display updates initialized');
+
+            // Register game loop
+            console.log('Setting up render loop...');
+            this.setupRenderLoop();
+            console.log('Render loop set up');
+
+            console.log('Game initialization completed successfully');
+        } catch (error) {
+            console.error('Error during game initialization:', error);
+            throw error;
+        }
+    }
+
+    initializeGameProperties() {
+        console.log('Initializing game arrays and properties...');
+        
+        // Initialize arrays
         this.astronauts = [];
         this.lasers = [];
         this.landers = [];
+        this.displays = [];
+        this.displayTextures = [];
+        this.buttons = [];
+        this.warningLights = [];
+
+        // Game state
+        this.score = 0;
+        this.level = 1;
+        this.lives = 3;
+        this.isRunning = false;
+        this.isGameOver = false;
+        
+        // Game settings
+        this.gameSpeed = 1;
+        this.difficulty = 1;
+        this.maxEnemies = 5;
+        
+        // Movement properties
+        this.moveSpeed = 0.1;
+        this.cameraXBounds = { min: -3, max: 3 };
+        this.cameraYBounds = { min: 1, max: 4 };
+        this.keys = {};
+
         // Laser properties
         this.laserSpeed = 2;
         this.canShoot = true;
-        this.shootCooldown = 250; // milliseconds between shots
+        this.shootCooldown = 250;
+
         // Lander spawn properties
-        this.landerSpawnInterval = 3000; // spawn every 3 seconds
+        this.landerSpawnInterval = 3000;
         this.lastLanderSpawn = 0;
-        // Game stats
-        this.score = 0;
-        this.astronautsSaved = 0;
-        this.landersDestroyed = 0;
-        
-        // Add health and energy properties
+
+        // Health and energy properties
         this.maxHealth = 100;
         this.health = this.maxHealth;
         this.maxEnergy = 100;
         this.energy = this.maxEnergy;
         this.energyRechargeRate = 0.2;
         this.laserEnergyCost = 10;
-        this.isGameOver = false;
-        
-        // Add mission start time
-        this.startTime = Date.now();
-        
-        // Add physics properties
+
+        // Physics properties
         this.gravity = -9.81;
         this.verticalVelocity = 0;
         this.isGrounded = false;
         this.jumpForce = 5;
-        
-        // Create our scene
-        this.scene = this.createScene();
-        
-        // Create GUI
-        this.createGUI();
-        
-        // Set up keyboard controls
-        this.setupControls();
-        
-        // Register game loop
-        this.engine.runRenderLoop(() => {
-            if (!this.isGameOver) {
-                const currentTime = Date.now();
-                
-                // Spawn new lander if it's time
-                if (currentTime - this.lastLanderSpawn > this.landerSpawnInterval) {
-                    this.spawnLander();
-                    this.lastLanderSpawn = currentTime;
-                }
 
-                // Recharge energy
-                if (this.energy < this.maxEnergy) {
-                    this.energy = Math.min(this.maxEnergy, this.energy + this.energyRechargeRate);
-                    this.updateEnergyBar();
+        // Add mission start time
+        this.startTime = Date.now();
+
+        console.log('Game properties initialized');
+    }
+
+    setupRenderLoop() {
+        console.log('Setting up render loop...');
+        
+        // Register a render loop to repeatedly render the scene
+        this.engine.runRenderLoop(() => {
+            try {
+                if (this.scene && this.isRunning) {
+                    // Update game logic
+                    this.update();
+                    // Render the scene
+                    this.scene.render();
                 }
+            } catch (error) {
+                console.error('Error in render loop:', error);
+                this.isRunning = false;
             }
-            this.scene.render();
         });
 
-        // Handle browser resize
+        // Handle window resize
         window.addEventListener('resize', () => {
             this.engine.resize();
         });
+
+        console.log('Render loop setup complete');
     }
 
     createGUI() {
-        // Create fullscreen UI
-        const advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+        if (!this.scene) return;
 
-        // Create health bar
-        const healthBarContainer = new BABYLON.GUI.Rectangle();
-        healthBarContainer.width = "200px";
-        healthBarContainer.height = "20px";
-        healthBarContainer.cornerRadius = 10;
-        healthBarContainer.color = "white";
-        healthBarContainer.thickness = 2;
-        healthBarContainer.background = "black";
-        healthBarContainer.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        healthBarContainer.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
-        healthBarContainer.left = "20px";
-        healthBarContainer.top = "120px";
-        advancedTexture.addControl(healthBarContainer);
+        try {
+            // Create fullscreen UI
+            this.guiTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
-        this.healthBar = new BABYLON.GUI.Rectangle();
-        this.healthBar.width = "100%";
-        this.healthBar.height = "100%";
-        this.healthBar.background = "red";
-        this.healthBar.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        healthBarContainer.addControl(this.healthBar);
+            // Create health bar container with null checks
+            const healthBarContainer = new BABYLON.GUI.Rectangle();
+            if (!healthBarContainer) return;
 
-        // Create energy bar
-        const energyBarContainer = new BABYLON.GUI.Rectangle();
-        energyBarContainer.width = "200px";
-        energyBarContainer.height = "20px";
-        energyBarContainer.cornerRadius = 10;
-        energyBarContainer.color = "white";
-        energyBarContainer.thickness = 2;
-        energyBarContainer.background = "black";
-        energyBarContainer.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        energyBarContainer.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
-        energyBarContainer.left = "20px";
-        energyBarContainer.top = "150px";
-        advancedTexture.addControl(energyBarContainer);
+            healthBarContainer.width = "200px";
+            healthBarContainer.height = "20px";
+            healthBarContainer.cornerRadius = 10;
+            healthBarContainer.color = "white";
+            healthBarContainer.thickness = 2;
+            healthBarContainer.background = "black";
+            healthBarContainer.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            healthBarContainer.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+            healthBarContainer.left = "20px";
+            healthBarContainer.top = "120px";
+            this.guiTexture.addControl(healthBarContainer);
 
-        this.energyBar = new BABYLON.GUI.Rectangle();
-        this.energyBar.width = "100%";
-        this.energyBar.height = "100%";
-        this.energyBar.background = "blue";
-        this.energyBar.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        energyBarContainer.addControl(this.energyBar);
+            this.healthBar = new BABYLON.GUI.Rectangle();
+            this.healthBar.width = "100%";
+            this.healthBar.height = "100%";
+            this.healthBar.background = "red";
+            this.healthBar.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            healthBarContainer.addControl(this.healthBar);
 
-        // Add labels for bars
-        const healthLabel = new BABYLON.GUI.TextBlock();
-        healthLabel.text = "HULL";
-        healthLabel.color = "white";
-        healthLabel.fontSize = 16;
-        healthLabel.top = "120px";
-        healthLabel.left = "230px";
-        healthLabel.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        advancedTexture.addControl(healthLabel);
+            // Create energy bar
+            const energyBarContainer = new BABYLON.GUI.Rectangle();
+            energyBarContainer.width = "200px";
+            energyBarContainer.height = "20px";
+            energyBarContainer.cornerRadius = 10;
+            energyBarContainer.color = "white";
+            energyBarContainer.thickness = 2;
+            energyBarContainer.background = "black";
+            energyBarContainer.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            energyBarContainer.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+            energyBarContainer.left = "20px";
+            energyBarContainer.top = "150px";
+            this.guiTexture.addControl(energyBarContainer);
 
-        const energyLabel = new BABYLON.GUI.TextBlock();
-        energyLabel.text = "ENERGY";
-        energyLabel.color = "white";
-        energyLabel.fontSize = 16;
-        energyLabel.top = "150px";
-        energyLabel.left = "230px";
-        energyLabel.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        advancedTexture.addControl(energyLabel);
+            this.energyBar = new BABYLON.GUI.Rectangle();
+            this.energyBar.width = "100%";
+            this.energyBar.height = "100%";
+            this.energyBar.background = "blue";
+            this.energyBar.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            energyBarContainer.addControl(this.energyBar);
 
-        // Store texture for later use
-        this.guiTexture = advancedTexture;
+            // Add labels for bars
+            const healthLabel = new BABYLON.GUI.TextBlock();
+            healthLabel.text = "HULL";
+            healthLabel.color = "white";
+            healthLabel.fontSize = 16;
+            healthLabel.top = "120px";
+            healthLabel.left = "230px";
+            healthLabel.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            this.guiTexture.addControl(healthLabel);
 
-        // Create score text
-        this.scoreText = new BABYLON.GUI.TextBlock();
-        this.scoreText.text = "Score: 0";
-        this.scoreText.color = "white";
-        this.scoreText.fontSize = 24;
-        this.scoreText.top = "20px";
-        this.scoreText.left = "20px";
-        this.scoreText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        advancedTexture.addControl(this.scoreText);
+            const energyLabel = new BABYLON.GUI.TextBlock();
+            energyLabel.text = "ENERGY";
+            energyLabel.color = "white";
+            energyLabel.fontSize = 16;
+            energyLabel.top = "150px";
+            energyLabel.left = "230px";
+            energyLabel.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            this.guiTexture.addControl(energyLabel);
 
-        // Create astronauts saved counter
-        this.astronautsSavedText = new BABYLON.GUI.TextBlock();
-        this.astronautsSavedText.text = "Astronauts Saved: 0";
-        this.astronautsSavedText.color = "green";
-        this.astronautsSavedText.fontSize = 24;
-        this.astronautsSavedText.top = "50px";
-        this.astronautsSavedText.left = "20px";
-        this.astronautsSavedText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        advancedTexture.addControl(this.astronautsSavedText);
+            // Store texture for later use
+            this.guiTexture = this.guiTexture;
 
-        // Create landers destroyed counter
-        this.landersDestroyedText = new BABYLON.GUI.TextBlock();
-        this.landersDestroyedText.text = "Landers Destroyed: 0";
-        this.landersDestroyedText.color = "red";
-        this.landersDestroyedText.fontSize = 24;
-        this.landersDestroyedText.top = "80px";
-        this.landersDestroyedText.left = "20px";
-        this.landersDestroyedText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        advancedTexture.addControl(this.landersDestroyedText);
+            // Create score text
+            this.scoreText = new BABYLON.GUI.TextBlock();
+            this.scoreText.text = "Score: 0";
+            this.scoreText.color = "white";
+            this.scoreText.fontSize = 24;
+            this.scoreText.top = "20px";
+            this.scoreText.left = "20px";
+            this.scoreText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            this.guiTexture.addControl(this.scoreText);
 
-        // Create controls help text
-        const controlsText = new BABYLON.GUI.TextBlock();
-        controlsText.text = "Controls:\nArrow Keys: Move\nSpacebar: Shoot";
-        controlsText.color = "white";
-        controlsText.fontSize = 20;
-        controlsText.top = "20px";
-        controlsText.left = "-20px";
-        controlsText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
-        advancedTexture.addControl(controlsText);
+            // Create astronauts saved counter
+            this.astronautsSavedText = new BABYLON.GUI.TextBlock();
+            this.astronautsSavedText.text = "Astronauts Saved: 0";
+            this.astronautsSavedText.color = "green";
+            this.astronautsSavedText.fontSize = 24;
+            this.astronautsSavedText.top = "50px";
+            this.astronautsSavedText.left = "20px";
+            this.astronautsSavedText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            this.guiTexture.addControl(this.astronautsSavedText);
+
+            // Create landers destroyed counter
+            this.landersDestroyedText = new BABYLON.GUI.TextBlock();
+            this.landersDestroyedText.text = "Landers Destroyed: 0";
+            this.landersDestroyedText.color = "red";
+            this.landersDestroyedText.fontSize = 24;
+            this.landersDestroyedText.top = "80px";
+            this.landersDestroyedText.left = "20px";
+            this.landersDestroyedText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            this.guiTexture.addControl(this.landersDestroyedText);
+
+            // Create controls help text
+            const controlsText = new BABYLON.GUI.TextBlock();
+            controlsText.text = "Controls:\nArrow Keys: Move\nSpacebar: Shoot";
+            controlsText.color = "white";
+            controlsText.fontSize = 20;
+            controlsText.top = "20px";
+            controlsText.left = "-20px";
+            controlsText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+            this.guiTexture.addControl(controlsText);
+        } catch (error) {
+            console.error('Error creating GUI:', error);
+            throw error;
+        }
     }
 
     updateScore(points) {
@@ -463,6 +538,8 @@ class Game {
     }
 
     spawnLander() {
+        if (!this.scene || !this.astronauts) return;
+        
         // Random position on right side of screen
         const x = 400; // Start from right side
         const z = Math.random() * 800 - 400; // Random Z position
@@ -470,7 +547,9 @@ class Game {
         
         // Create new lander
         const lander = new Lander(this.scene, position, this.astronauts);
-        this.landers.push(lander);
+        if (lander && lander.mesh) {
+            this.landers.push(lander);
+        }
     }
 
     updateLanders() {
@@ -512,132 +591,139 @@ class Game {
     }
 
     createScene() {
-        // Create the scene space
-        const scene = new BABYLON.Scene(this.engine);
+        try {
+            console.log('Creating scene...');
+            // Create the scene space
+            const scene = new BABYLON.Scene(this.engine);
 
-        // Add a camera to the scene (using Universal Camera for FPS-style controls)
-        this.camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 10, -8), scene);
-        this.camera.setTarget(new BABYLON.Vector3(0, 2, 0));
-        
-        // Camera settings for smooth movement
-        this.camera.speed = 0.5;
-        this.camera.angularSensibility = 1000; // Mouse sensitivity
-        this.camera.inertia = 0.5;
-        this.camera.rotationQuaternion = new BABYLON.Quaternion();
+            // Initialize arrays first
+            console.log('Initializing arrays...');
+            this.astronauts = [];
+            this.lasers = [];
+            this.landers = [];
+            this.displays = [];
+            this.displayTextures = [];
+            this.buttons = [];
+            this.warningLights = [];
 
-        // Set camera constraints
-        this.camera.minZ = 0.1;
-        this.camera.maxZ = 1000;
-        
-        // Enable camera controls
-        this.camera.attachControl(this.canvas, true);
-        
-        // Customize camera inputs
-        this.camera.inputs.clear();
-        this.camera.inputs.addMouseWheel();
-        this.camera.inputs.addKeyboard();
-
-        // Create space skybox
-        const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", { size: 5000.0 }, scene);
-        const skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
-        skyboxMaterial.backFaceCulling = false;
-        skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://assets.babylonjs.com/textures/space", scene);
-        skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
-        skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
-        skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
-        skybox.material = skyboxMaterial;
-
-        // Create the first moon in the skybox
-        const moon1 = BABYLON.MeshBuilder.CreateSphere("moon1", { diameter: 100 }, scene);
-        moon1.position = new BABYLON.Vector3(1000, 500, 1000);
-        const moon1Material = new BABYLON.StandardMaterial("moon1Material", scene);
-        moon1Material.emissiveTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/moon.jpg", scene);
-        moon1Material.diffuseTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/moon.jpg", scene);
-        moon1.material = moon1Material;
-
-        // Create the second moon (smaller and with different coloring)
-        const moon2 = BABYLON.MeshBuilder.CreateSphere("moon2", { diameter: 60 }, scene);
-        moon2.position = new BABYLON.Vector3(-800, 300, 800);
-        const moon2Material = new BABYLON.StandardMaterial("moon2Material", scene);
-        moon2Material.emissiveTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/moon.jpg", scene);
-        moon2Material.diffuseTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/moon.jpg", scene);
-        moon2Material.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.5); // Bluish tint
-        moon2.material = moon2Material;
-
-        // Add ambient light for general illumination
-        const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 1, 0), scene);
-        ambientLight.intensity = 0.2;
-
-        // Add directional light to simulate sun
-        const sunLight = new BABYLON.DirectionalLight("sunLight", new BABYLON.Vector3(-1, -2, 1), scene);
-        sunLight.intensity = 0.5;
-
-        // Create lunar terrain
-        const terrainMaterial = new BABYLON.StandardMaterial("terrainMaterial", scene);
-        terrainMaterial.diffuseTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/lunar_surface.jpg", scene);
-        terrainMaterial.bumpTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/lunar_normal.jpg", scene);
-        terrainMaterial.diffuseTexture.uScale = 20;
-        terrainMaterial.diffuseTexture.vScale = 20;
-        terrainMaterial.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-
-        // Create ground with heightmap for terrain
-        const ground = BABYLON.MeshBuilder.CreateGroundFromHeightMap("ground", 
-            "https://assets.babylonjs.com/textures/heightMap.png", {
-            width: 1000,
-            height: 1000,
-            subdivisions: 100,
-            minHeight: 0,
-            maxHeight: 20
-        }, scene);
-        ground.material = terrainMaterial;
-        ground.position.y = -2;
-        ground.checkCollisions = true;
-
-        // Enable physics
-        scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
-        ground.physicsImpostor = new BABYLON.PhysicsImpostor(
-            ground, 
-            BABYLON.PhysicsImpostor.HeightmapImpostor, 
-            { mass: 0, restitution: 0.9 }, 
-            scene
-        );
-
-        // Create mountains
-        this.createMountains(scene, ground);
-
-        // Store the ground plane as a class property
-        this.gamePlane = ground;
-
-        // Create astronauts
-        this.createAstronauts(scene);
-
-        // Add scrolling animation with terrain following
-        scene.onBeforeRenderObservable.add(() => {
-            // Check ground collision
-            const groundHeight = ground.getHeightAtCoordinates(
-                this.camera.position.x, 
-                this.camera.position.z
-            );
+            console.log('Setting up camera...');
+            // Add a camera to the scene (using Universal Camera for FPS-style controls)
+            this.camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 10, -8), scene);
+            this.camera.setTarget(new BABYLON.Vector3(0, 2, 0));
             
-            if (this.camera.position.y < groundHeight + 2) {
-                this.camera.position.y = groundHeight + 2;
-            }
+            // Camera settings for smooth movement
+            this.camera.speed = 0.5;
+            this.camera.angularSensibility = 1000; // Mouse sensitivity
+            this.camera.inertia = 0.5;
+            this.camera.rotationQuaternion = new BABYLON.Quaternion();
 
-            // Update game objects
-            this.updateAstronauts();
-            this.updateLanders();
-        });
+            // Set camera constraints
+            this.camera.minZ = 0.1;
+            this.camera.maxZ = 1000;
+            
+            // Enable camera controls
+            this.camera.attachControl(this.canvas, true);
+            
+            // Customize camera inputs
+            this.camera.inputs.clear();
+            this.camera.inputs.addMouseWheel();
+            this.camera.inputs.addKeyboard();
 
-        // Create cockpit frame
-        this.createCockpitFrame(scene);
+            console.log('Creating lights...');
+            // Add ambient light for general illumination
+            const ambientLight = new BABYLON.HemisphericLight("ambientLight", new BABYLON.Vector3(0, 1, 0), scene);
+            ambientLight.intensity = 0.2;
 
-        // Store the scene
-        this.scene = scene;
+            // Add directional light to simulate sun
+            const sunLight = new BABYLON.DirectionalLight("sunLight", new BABYLON.Vector3(-1, -2, 1), scene);
+            sunLight.intensity = 0.5;
 
-        // Initialize display updates after scene is created
-        this.initializeDisplayUpdates();
+            console.log('Creating skybox...');
+            // Create space skybox
+            const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", { size: 5000.0 }, scene);
+            const skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
+            skyboxMaterial.backFaceCulling = false;
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://assets.babylonjs.com/textures/space", scene);
+            skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skybox.material = skyboxMaterial;
 
-        return scene;
+            console.log('Creating terrain...');
+            // Create lunar terrain
+            const terrainMaterial = new BABYLON.StandardMaterial("terrainMaterial", scene);
+            terrainMaterial.diffuseTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/lunar_surface.jpg", scene);
+            terrainMaterial.bumpTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/lunar_normal.jpg", scene);
+            terrainMaterial.diffuseTexture.uScale = 20;
+            terrainMaterial.diffuseTexture.vScale = 20;
+            terrainMaterial.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+
+            // Create ground with heightmap for terrain
+            const ground = BABYLON.MeshBuilder.CreateGround("ground", {
+                width: 1000,
+                height: 1000,
+                subdivisions: 100
+            }, scene);
+            
+            ground.material = terrainMaterial;
+            ground.position.y = -2;
+            ground.checkCollisions = true;
+
+            // Store the ground plane as a class property
+            this.gamePlane = ground;
+
+            console.log('Setting up physics...');
+            // Enable physics
+            scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
+            ground.physicsImpostor = new BABYLON.PhysicsImpostor(
+                ground, 
+                BABYLON.PhysicsImpostor.HeightmapImpostor, 
+                { mass: 0, restitution: 0.9 }, 
+                scene
+            );
+
+            console.log('Creating mountains...');
+            // Create mountains
+            this.createMountains(scene, ground);
+
+            console.log('Creating astronauts...');
+            // Create astronauts (after ground is created)
+            this.createAstronauts(scene);
+
+            console.log('Setting up scene updates...');
+            // Add scrolling animation with terrain following
+            scene.onBeforeRenderObservable.add(() => {
+                if (!this.camera || !this.gamePlane) return;
+
+                // Check ground collision
+                const groundHeight = 2; // Fixed height above ground
+                if (this.camera.position.y < groundHeight) {
+                    this.camera.position.y = groundHeight;
+                }
+
+                // Update game objects
+                if (this.astronauts && this.astronauts.length > 0) {
+                    this.updateAstronauts();
+                }
+                if (this.landers && this.landers.length > 0) {
+                    this.updateLanders();
+                }
+            });
+
+            console.log('Creating cockpit...');
+            // Create cockpit frame
+            this.createCockpitFrame(scene);
+
+            // Store the scene
+            this.scene = scene;
+
+            console.log('Scene creation completed');
+            return scene;
+
+        } catch (error) {
+            console.error('Error in createScene:', error);
+            throw error;
+        }
     }
 
     createMountains(scene, ground) {
@@ -979,161 +1065,163 @@ class Game {
         });
     }
 
-    // Separate method for initializing display updates
     initializeDisplayUpdates() {
+        console.log('Setting up display update intervals...');
+        
+        // Update displays every second
+        this.displayUpdateInterval = setInterval(() => {
+            if (this.isRunning && !this.isGameOver) {
+                this.updateDisplays();
+            }
+        }, 1000);
+
+        // Update warning lights every 500ms
+        this.warningUpdateInterval = setInterval(() => {
+            if (this.isRunning && !this.isGameOver) {
+                this.updateWarningLights();
+            }
+        }, 500);
+
+        console.log('Display update intervals set');
+    }
+
+    updateDisplays() {
         if (!this.scene || !this.displayTextures) return;
 
-        // Add warning light animation
-        this.scene.onBeforeRenderObservable.add(() => {
-            if (this.health < 30 || this.energy < 30) {
-                const intensity = (Math.sin(Date.now() * 0.01) + 1) / 2;
-                this.warningLights.forEach(light => {
-                    light.material.emissiveColor = new BABYLON.Color3(intensity, 0, 0);
-                });
-            } else {
-                this.warningLights.forEach(light => {
-                    light.material.emissiveColor = new BABYLON.Color3(0.1, 0, 0);
-                });
-            }
-        });
-
-        // Update displays every frame
-        this.scene.onBeforeRenderObservable.add(() => {
-            // Update left display with targeting info
-            const ctx0 = this.displayTextures[0].getContext();
-            ctx0.clearRect(0, 0, 256, 128);
-            
-            // Draw radar background
-            ctx0.fillStyle = "rgba(0, 20, 0, 0.3)";
-            ctx0.fillRect(0, 0, 256, 128);
-            
-            // Draw radar grid
-            ctx0.strokeStyle = "rgba(0, 255, 0, 0.2)";
-            for (let i = 0; i < 256; i += 32) {
-                ctx0.beginPath();
-                ctx0.moveTo(i, 0);
-                ctx0.lineTo(i, 128);
-                ctx0.stroke();
-            }
-            for (let i = 0; i < 128; i += 32) {
-                ctx0.beginPath();
-                ctx0.moveTo(0, i);
-                ctx0.lineTo(256, i);
-                ctx0.stroke();
-            }
-
-            // Draw radar sweep
-            const time = Date.now() * 0.001;
-            const sweepAngle = (time % 2) * Math.PI;
-            ctx0.strokeStyle = "rgba(0, 255, 0, 0.5)";
+        // Update left display with targeting info
+        const ctx0 = this.displayTextures[0].getContext();
+        ctx0.clearRect(0, 0, 256, 128);
+        
+        // Draw radar background
+        ctx0.fillStyle = "rgba(0, 20, 0, 0.3)";
+        ctx0.fillRect(0, 0, 256, 128);
+        
+        // Draw radar grid
+        ctx0.strokeStyle = "rgba(0, 255, 0, 0.2)";
+        for (let i = 0; i < 256; i += 32) {
             ctx0.beginPath();
-            ctx0.moveTo(128, 64);
-            ctx0.lineTo(
-                128 + Math.cos(sweepAngle) * 128,
-                64 + Math.sin(sweepAngle) * 64
-            );
+            ctx0.moveTo(i, 0);
+            ctx0.lineTo(i, 128);
             ctx0.stroke();
+        }
+        for (let i = 0; i < 128; i += 32) {
+            ctx0.beginPath();
+            ctx0.moveTo(0, i);
+            ctx0.lineTo(256, i);
+            ctx0.stroke();
+        }
 
-            // Draw enemy blips
-            this.landers.forEach(lander => {
-                const relativeX = (lander.mesh.position.x - this.camera.position.x) / 2;
-                const relativeZ = (lander.mesh.position.z - this.camera.position.z) / 2;
-                const blipX = 128 + relativeX;
-                const blipY = 64 + relativeZ;
-                
-                if (blipX >= 0 && blipX <= 256 && blipY >= 0 && blipY <= 128) {
-                    ctx0.fillStyle = "red";
-                    ctx0.beginPath();
-                    ctx0.arc(blipX, blipY, 3, 0, Math.PI * 2);
-                    ctx0.fill();
-                }
-            });
+        // Draw radar sweep
+        const time = Date.now() * 0.001;
+        const sweepAngle = (time % 2) * Math.PI;
+        ctx0.strokeStyle = "rgba(0, 255, 0, 0.5)";
+        ctx0.beginPath();
+        ctx0.moveTo(128, 64);
+        ctx0.lineTo(
+            128 + Math.cos(sweepAngle) * 128,
+            64 + Math.sin(sweepAngle) * 64
+        );
+        ctx0.stroke();
 
-            // Draw astronaut blips
-            this.astronauts.forEach(astronaut => {
-                const relativeX = (astronaut.position.x - this.camera.position.x) / 2;
-                const relativeZ = (astronaut.position.z - this.camera.position.z) / 2;
-                const blipX = 128 + relativeX;
-                const blipY = 64 + relativeZ;
-                
-                if (blipX >= 0 && blipX <= 256 && blipY >= 0 && blipY <= 128) {
-                    ctx0.fillStyle = "green";
-                    ctx0.beginPath();
-                    ctx0.arc(blipX, blipY, 2, 0, Math.PI * 2);
-                    ctx0.fill();
-                }
-            });
-
-            // Draw HUD information
-            ctx0.fillStyle = "lime";
-            ctx0.font = "12px monospace";
-            ctx0.fillText(`RADAR RANGE: 200m`, 10, 15);
+        // Draw enemy blips
+        this.landers.forEach(lander => {
+            const relativeX = (lander.mesh.position.x - this.camera.position.x) / 2;
+            const relativeZ = (lander.mesh.position.z - this.camera.position.z) / 2;
+            const blipX = 128 + relativeX;
+            const blipY = 64 + relativeZ;
             
-            // Draw targeting data
-            const closestDistance = this.getClosestLanderDistance();
-            ctx0.fillStyle = closestDistance < 20 ? "red" : "lime";
-            ctx0.fillText(`NEAREST THREAT: ${Math.floor(closestDistance)}m`, 10, 30);
-            ctx0.fillStyle = "lime";
-            ctx0.fillText(`ACTIVE THREATS: ${this.landers.length}`, 10, 45);
-            
-            // Draw energy status with warning
-            const energyPercent = Math.floor(this.energy);
-            ctx0.fillStyle = energyPercent < 30 ? "red" : "lime";
-            ctx0.fillText(`ENERGY: ${energyPercent}%`, 10, 60);
-            if (energyPercent < 30) {
-                if (Math.sin(Date.now() * 0.01) > 0) {
-                    ctx0.fillText("LOW ENERGY WARNING", 10, 75);
-                }
+            if (blipX >= 0 && blipX <= 256 && blipY >= 0 && blipY <= 128) {
+                ctx0.fillStyle = "red";
+                ctx0.beginPath();
+                ctx0.arc(blipX, blipY, 3, 0, Math.PI * 2);
+                ctx0.fill();
             }
-
-            this.displayTextures[0].update();
-
-            // Update right display with mission stats and system status
-            const ctx1 = this.displayTextures[1].getContext();
-            ctx1.clearRect(0, 0, 256, 128);
-            
-            // Draw system status background
-            ctx1.fillStyle = "rgba(0, 20, 0, 0.3)";
-            ctx1.fillRect(0, 0, 256, 128);
-
-            // Draw header
-            ctx1.fillStyle = "lime";
-            ctx1.font = "14px monospace";
-            ctx1.fillText("MISSION STATUS", 10, 20);
-            
-            // Draw separator line
-            ctx1.strokeStyle = "rgba(0, 255, 0, 0.5)";
-            ctx1.beginPath();
-            ctx1.moveTo(10, 25);
-            ctx1.lineTo(246, 25);
-            ctx1.stroke();
-
-            // Draw mission stats with dynamic formatting
-            ctx1.font = "12px monospace";
-            ctx1.fillText(`SCORE: ${this.score}`, 10, 45);
-            ctx1.fillText(`ASTRONAUTS SAVED: ${this.astronautsSaved}`, 10, 60);
-            ctx1.fillText(`HOSTILES ELIMINATED: ${this.landersDestroyed}`, 10, 75);
-            
-            // Draw hull integrity
-            const hullPercent = Math.floor((this.health / this.maxHealth) * 100);
-            ctx1.fillStyle = hullPercent < 30 ? "red" : "lime";
-            ctx1.fillText(`HULL INTEGRITY: ${hullPercent}%`, 10, 90);
-            
-            // Draw warning messages
-            if (hullPercent < 30) {
-                if (Math.sin(Date.now() * 0.01) > 0) {
-                    ctx1.fillStyle = "red";
-                    ctx1.fillText("WARNING: HULL CRITICAL", 10, 105);
-                }
-            }
-
-            // Draw mission time
-            const missionTime = Math.floor((Date.now() - this.startTime) / 1000);
-            ctx1.fillStyle = "lime";
-            ctx1.fillText(`MISSION TIME: ${Math.floor(missionTime / 60)}:${(missionTime % 60).toString().padStart(2, '0')}`, 10, 120);
-
-            this.displayTextures[1].update();
         });
+
+        // Draw astronaut blips
+        this.astronauts.forEach(astronaut => {
+            const relativeX = (astronaut.position.x - this.camera.position.x) / 2;
+            const relativeZ = (astronaut.position.z - this.camera.position.z) / 2;
+            const blipX = 128 + relativeX;
+            const blipY = 64 + relativeZ;
+            
+            if (blipX >= 0 && blipX <= 256 && blipY >= 0 && blipY <= 128) {
+                ctx0.fillStyle = "green";
+                ctx0.beginPath();
+                ctx0.arc(blipX, blipY, 2, 0, Math.PI * 2);
+                ctx0.fill();
+            }
+        });
+
+        // Draw HUD information
+        ctx0.fillStyle = "lime";
+        ctx0.font = "12px monospace";
+        ctx0.fillText(`RADAR RANGE: 200m`, 10, 15);
+        
+        // Draw targeting data
+        const closestDistance = this.getClosestLanderDistance();
+        ctx0.fillStyle = closestDistance < 20 ? "red" : "lime";
+        ctx0.fillText(`NEAREST THREAT: ${Math.floor(closestDistance)}m`, 10, 30);
+        ctx0.fillStyle = "lime";
+        ctx0.fillText(`ACTIVE THREATS: ${this.landers.length}`, 10, 45);
+        
+        // Draw energy status with warning
+        const energyPercent = Math.floor(this.energy);
+        ctx0.fillStyle = energyPercent < 30 ? "red" : "lime";
+        ctx0.fillText(`ENERGY: ${energyPercent}%`, 10, 60);
+        if (energyPercent < 30) {
+            if (Math.sin(Date.now() * 0.01) > 0) {
+                ctx0.fillText("LOW ENERGY WARNING", 10, 75);
+            }
+        }
+
+        this.displayTextures[0].update();
+
+        // Update right display with mission stats and system status
+        const ctx1 = this.displayTextures[1].getContext();
+        ctx1.clearRect(0, 0, 256, 128);
+        
+        // Draw system status background
+        ctx1.fillStyle = "rgba(0, 20, 0, 0.3)";
+        ctx1.fillRect(0, 0, 256, 128);
+
+        // Draw header
+        ctx1.fillStyle = "lime";
+        ctx1.font = "14px monospace";
+        ctx1.fillText("MISSION STATUS", 10, 20);
+        
+        // Draw separator line
+        ctx1.strokeStyle = "rgba(0, 255, 0, 0.5)";
+        ctx1.beginPath();
+        ctx1.moveTo(10, 25);
+        ctx1.lineTo(246, 25);
+        ctx1.stroke();
+
+        // Draw mission stats with dynamic formatting
+        ctx1.font = "12px monospace";
+        ctx1.fillText(`SCORE: ${this.score}`, 10, 45);
+        ctx1.fillText(`ASTRONAUTS SAVED: ${this.astronautsSaved}`, 10, 60);
+        ctx1.fillText(`HOSTILES ELIMINATED: ${this.landersDestroyed}`, 10, 75);
+        
+        // Draw hull integrity
+        const hullPercent = Math.floor((this.health / this.maxHealth) * 100);
+        ctx1.fillStyle = hullPercent < 30 ? "red" : "lime";
+        ctx1.fillText(`HULL INTEGRITY: ${hullPercent}%`, 10, 90);
+        
+        // Draw warning messages
+        if (hullPercent < 30) {
+            if (Math.sin(Date.now() * 0.01) > 0) {
+                ctx1.fillStyle = "red";
+                ctx1.fillText("WARNING: HULL CRITICAL", 10, 105);
+            }
+        }
+
+        // Draw mission time
+        const missionTime = Math.floor((Date.now() - this.startTime) / 1000);
+        ctx1.fillStyle = "lime";
+        ctx1.fillText(`MISSION TIME: ${Math.floor(missionTime / 60)}:${(missionTime % 60).toString().padStart(2, '0')}`, 10, 120);
+
+        this.displayTextures[1].update();
     }
 
     getClosestLanderDistance() {
@@ -1154,9 +1242,32 @@ class Game {
 
     // Add game state management
     start() {
-        // Initialize game state
-        this.isRunning = true;
-        console.log("Game started!");
+        console.log('Starting game...');
+        try {
+            // Make sure everything is initialized
+            if (!this.scene || !this.camera || !this.engine) {
+                throw new Error('Game not properly initialized');
+            }
+
+            // Initialize game state
+            this.isRunning = true;
+            this.isGameOver = false;
+            this.startTime = Date.now();
+
+            // Start the render loop if it's not already running
+            if (!this.engine.isRunning) {
+                this.engine.runRenderLoop(() => {
+                    if (this.scene && this.isRunning) {
+                        this.scene.render();
+                    }
+                });
+            }
+
+            console.log('Game started successfully');
+        } catch (error) {
+            console.error('Error starting game:', error);
+            throw error;
+        }
     }
 
     pause() {
@@ -1257,6 +1368,7 @@ class Game {
     }
 
     updateHealthBar() {
+        if (!this.healthBar) return;
         this.healthBar.width = (this.health / this.maxHealth * 100) + "%";
         if (this.health < 30) {
             this.healthBar.background = "darkred";
@@ -1264,6 +1376,172 @@ class Game {
     }
 
     updateEnergyBar() {
+        if (!this.energyBar) return;
         this.energyBar.width = (this.energy / this.maxEnergy * 100) + "%";
+    }
+
+    updateWarningLights() {
+        if (this.health < 30 || this.energy < 30) {
+            const intensity = (Math.sin(Date.now() * 0.01) + 1) / 2;
+            this.warningLights.forEach(light => {
+                light.material.emissiveColor = new BABYLON.Color3(intensity, 0, 0);
+            });
+        } else {
+            this.warningLights.forEach(light => {
+                light.material.emissiveColor = new BABYLON.Color3(0.1, 0, 0);
+            });
+        }
+    }
+
+    update() {
+        if (!this.isRunning || this.isGameOver) return;
+
+        const currentTime = Date.now();
+        
+        try {
+            // Spawn new lander if it's time
+            if (currentTime - this.lastLanderSpawn > this.landerSpawnInterval) {
+                this.spawnLander();
+                this.lastLanderSpawn = currentTime;
+            }
+
+            // Update energy
+            if (this.energy < this.maxEnergy) {
+                this.energy = Math.min(this.maxEnergy, this.energy + this.energyRechargeRate);
+                this.updateEnergyBar();
+            }
+
+            // Update game objects
+            this.updateLasers();
+            this.updateLanders();
+            this.updateAstronauts();
+
+            // Check for collisions
+            this.checkCollisions();
+
+            // Update game difficulty
+            this.updateDifficulty();
+
+        } catch (error) {
+            console.error('Error in game update loop:', error);
+            this.isRunning = false;
+        }
+    }
+
+    updateLasers() {
+        for (let i = this.lasers.length - 1; i >= 0; i--) {
+            const laser = this.lasers[i];
+            if (laser.position.y > 1000 || laser.position.y < -1000) {
+                laser.dispose();
+                this.lasers.splice(i, 1);
+            }
+        }
+    }
+
+    updateLanders() {
+        for (let i = this.landers.length - 1; i >= 0; i--) {
+            const lander = this.landers[i];
+            
+            // Move lander down
+            lander.position.y -= this.gameSpeed * 0.5;
+
+            // Remove if out of bounds
+            if (lander.position.y < -100) {
+                lander.dispose();
+                this.landers.splice(i, 1);
+            }
+        }
+    }
+
+    updateAstronauts() {
+        for (let i = this.astronauts.length - 1; i >= 0; i--) {
+            const astronaut = this.astronauts[i];
+            
+            // Apply gravity
+            astronaut.position.y -= this.gameSpeed * 0.3;
+
+            // Remove if out of bounds
+            if (astronaut.position.y < -100) {
+                astronaut.dispose();
+                this.astronauts.splice(i, 1);
+                this.updateScore(-50); // Penalty for lost astronaut
+            }
+        }
+    }
+
+    updateDifficulty() {
+        const timePlayed = (Date.now() - this.startTime) / 1000; // Time in seconds
+        
+        // Increase difficulty every 30 seconds
+        this.difficulty = Math.min(10, 1 + Math.floor(timePlayed / 30));
+        
+        // Adjust game parameters based on difficulty
+        this.gameSpeed = 1 + (this.difficulty * 0.1);
+        this.landerSpawnInterval = Math.max(1000, 3000 - (this.difficulty * 200));
+        this.maxEnemies = 5 + Math.floor(this.difficulty / 2);
+    }
+
+    checkCollisions() {
+        // Check laser collisions with landers
+        for (let i = this.lasers.length - 1; i >= 0; i--) {
+            const laser = this.lasers[i];
+            
+            for (let j = this.landers.length - 1; j >= 0; j--) {
+                const lander = this.landers[j];
+                
+                if (this.checkObjectCollision(laser, lander)) {
+                    // Create explosion effect
+                    this.createExplosion(lander.position);
+                    
+                    // Remove both objects
+                    laser.dispose();
+                    lander.dispose();
+                    this.lasers.splice(i, 1);
+                    this.landers.splice(j, 1);
+                    
+                    // Update score
+                    this.updateScore(100);
+                    break;
+                }
+            }
+        }
+    }
+
+    checkObjectCollision(obj1, obj2) {
+        const distance = BABYLON.Vector3.Distance(obj1.position, obj2.position);
+        return distance < 2; // Collision threshold
+    }
+
+    createExplosion(position) {
+        // Create particle system for explosion
+        const explosion = new BABYLON.ParticleSystem("explosion", 100, this.scene);
+        explosion.particleTexture = new BABYLON.Texture("textures/flare.png", this.scene);
+        explosion.emitter = position;
+        explosion.minEmitBox = new BABYLON.Vector3(-0.5, -0.5, -0.5);
+        explosion.maxEmitBox = new BABYLON.Vector3(0.5, 0.5, 0.5);
+        explosion.color1 = new BABYLON.Color4(1, 0.5, 0, 1.0);
+        explosion.color2 = new BABYLON.Color4(1, 0, 0, 1.0);
+        explosion.minSize = 0.3;
+        explosion.maxSize = 0.8;
+        explosion.minLifeTime = 0.3;
+        explosion.maxLifeTime = 0.5;
+        explosion.emitRate = 100;
+        explosion.gravity = new BABYLON.Vector3(0, 0, 0);
+        explosion.direction1 = new BABYLON.Vector3(-1, -1, -1);
+        explosion.direction2 = new BABYLON.Vector3(1, 1, 1);
+        explosion.minEmitPower = 1;
+        explosion.maxEmitPower = 3;
+        explosion.updateSpeed = 0.01;
+
+        // Start the particle system
+        explosion.start();
+
+        // Stop and dispose after animation
+        setTimeout(() => {
+            explosion.stop();
+            setTimeout(() => {
+                explosion.dispose();
+            }, 1000);
+        }, 300);
     }
 } 
