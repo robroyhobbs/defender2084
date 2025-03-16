@@ -1,0 +1,18 @@
+{
+  "name": "defender2084",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/three": "^0.174.0",
+    "express": "^4.21.2",
+    "three": "^0.174.0",
+    "vite": "^6.2.2"
+  },
+  "description": ""
+}
